@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { classroomsAPI, studentsAPI, reportsAPI } from '../services/api';
 import { useAuth } from '../App';
+import ThreeAngleWebcamModal from '../components/ThreeAngleWebcamModal';
 import {
   Camera, Users, School, BarChart3, Plus, ArrowRight, Loader2, ScanFace,
   ShieldCheck, UserCheck, AlertTriangle, CheckCircle2, Clock, Calendar,
@@ -231,12 +232,23 @@ function StudentDashboard({ user, classrooms, students = [], onRefresh }) {
   const [rightFile, setRightFile] = useState(null);
   const [enrolling, setEnrolling] = useState(false);
   const [enrollMsg, setEnrollMsg] = useState(null);
+  const [stats, setStats]         = useState(null);
+  const [showLiveModal, setShowLiveModal] = useState(false);
 
   useEffect(() => {
     if (students.length > 0 && !selectedStudentId) {
-      setSelectedStudentId(students[0].id);
+      const match = students.find(s => s.name?.toLowerCase() === user?.username?.toLowerCase() || s.roll_number?.toLowerCase() === user?.username?.toLowerCase());
+      setSelectedStudentId(match ? match.id : students[0].id);
     }
-  }, [students, selectedStudentId]);
+  }, [students, selectedStudentId, user]);
+
+  useEffect(() => {
+    if (selectedStudentId) {
+      reportsAPI.student(selectedStudentId)
+        .then(r => setStats(r.data))
+        .catch(() => setStats(null));
+    }
+  }, [selectedStudentId]);
 
   const handleEnrollAngles = async (e) => {
     e.preventDefault();
@@ -327,19 +339,37 @@ function StudentDashboard({ user, classrooms, students = [], onRefresh }) {
           </div>
         )}
 
+        {/* Live Camera Studio Shortcut Banner */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-emerald-50 to-teal-50 p-4 rounded-2xl border border-emerald-200/60 shadow-sm">
+          <div>
+            <h4 className="text-sm font-bold text-emerald-900 flex items-center gap-1.5">
+              <span>⚡</span> Faster on Mobile &amp; Laptops: Live Camera Studio
+            </h4>
+            <p className="text-xs text-emerald-700 mt-0.5">Use your camera to take Front, Left, and Right photos instantly without selecting files from gallery.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowLiveModal(true)}
+            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 shrink-0 active:scale-95 transition-all"
+          >
+            <Camera size={16} />
+            <span>📸 Take Live 3-Angle Photos</span>
+          </button>
+        </div>
+
         <form onSubmit={handleEnrollAngles} className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end pt-2">
           <div>
-            <label className="block text-[11px] font-extrabold text-slate-600 uppercase mb-1">1️⃣ Frontal Photo *</label>
+            <label className="block text-[11px] font-extrabold text-slate-600 uppercase mb-1">1️⃣ Frontal Photo * {frontFile && <span className="text-emerald-600">✅</span>}</label>
             <input type="file" accept="image/*" onChange={(e) => setFrontFile(e.target.files[0])}
                    className="text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 w-full" />
           </div>
           <div>
-            <label className="block text-[11px] font-extrabold text-slate-600 uppercase mb-1">2️⃣ Left Angle (~45°)</label>
+            <label className="block text-[11px] font-extrabold text-slate-600 uppercase mb-1">2️⃣ Left Angle (~45°) {leftFile && <span className="text-teal-600">✅</span>}</label>
             <input type="file" accept="image/*" onChange={(e) => setLeftFile(e.target.files[0])}
                    className="text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 w-full" />
           </div>
           <div>
-            <label className="block text-[11px] font-extrabold text-slate-600 uppercase mb-1">3️⃣ Right Angle (~45°)</label>
+            <label className="block text-[11px] font-extrabold text-slate-600 uppercase mb-1">3️⃣ Right Angle (~45°) {rightFile && <span className="text-cyan-600">✅</span>}</label>
             <input type="file" accept="image/*" onChange={(e) => setRightFile(e.target.files[0])}
                    className="text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-cyan-50 file:text-cyan-700 hover:file:bg-cyan-100 w-full" />
           </div>
@@ -351,6 +381,20 @@ function StudentDashboard({ user, classrooms, students = [], onRefresh }) {
             </button>
           </div>
         </form>
+
+        {showLiveModal && (
+          <ThreeAngleWebcamModal
+            studentName={students.find(s => String(s.id) === String(selectedStudentId))?.name || user?.username}
+            onComplete={(files) => {
+              setFrontFile(files.front);
+              setLeftFile(files.left);
+              setRightFile(files.right);
+              setShowLiveModal(false);
+              setEnrollMsg({ type: 'success', text: '✅ 3 Live photos captured! Click "Enroll 3 Angles" below to save to AI engine.' });
+            }}
+            onClose={() => setShowLiveModal(false)}
+          />
+        )}
       </div>
 
       {/* Student Stats Bar */}
@@ -359,10 +403,10 @@ function StudentDashboard({ user, classrooms, students = [], onRefresh }) {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-bold uppercase tracking-wider text-emerald-100">Overall Attendance</p>
-              <h3 className="text-4xl font-extrabold mt-1">94.2%</h3>
+              <h3 className="text-4xl font-extrabold mt-1">{stats ? `${stats.attendance_rate}%` : '100%'}</h3>
               <p className="text-xs text-emerald-100 mt-1 flex items-center gap-1">
                 <CheckCircle2 size={14} />
-                <span>Good standing (&gt;75% required)</span>
+                <span>{stats && stats.attendance_rate < 75 ? 'Warning (<75% required)' : 'Good standing (>75% required)'}</span>
               </p>
             </div>
             <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
@@ -375,8 +419,8 @@ function StudentDashboard({ user, classrooms, students = [], onRefresh }) {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Classes Attended</p>
-              <h3 className="text-3xl font-extrabold text-slate-800 mt-1">48 / 51</h3>
-              <p className="text-xs text-emerald-600 mt-1 font-semibold">3 excused absences recorded</p>
+              <h3 className="text-3xl font-extrabold text-slate-800 mt-1">{stats ? `${stats.present} / ${stats.total_sessions}` : '0 / 0'}</h3>
+              <p className="text-xs text-emerald-600 mt-1 font-semibold">{stats ? `${stats.absent} absences recorded` : 'No absences recorded'}</p>
             </div>
             <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600">
               <Calendar size={24} />
@@ -412,7 +456,7 @@ function StudentDashboard({ user, classrooms, students = [], onRefresh }) {
             { id: 3, name: 'Database Management Systems', department: 'IT Dept', section: 'A', percent: 88, attended: '22 / 25' },
             { id: 4, name: 'Cloud Computing & DevOps', department: 'CS Dept', section: 'C', percent: 95, attended: '19 / 20' }
           ]).map((c, idx) => {
-            const pct = c.percent || (90 + (idx % 6));
+            const pct = c.percent !== undefined ? c.percent : (stats ? stats.attendance_rate : 100);
             return (
               <div key={c.id || idx} className="stat-card flex flex-col justify-between space-y-4 hover:border-emerald-500/30 transition-all">
                 <div className="flex items-start justify-between">
@@ -421,7 +465,7 @@ function StudentDashboard({ user, classrooms, students = [], onRefresh }) {
                       {c.department || 'Computer Science'}
                     </span>
                     <h3 className="text-lg font-bold text-slate-800 mt-1">{c.name}</h3>
-                    <p className="text-xs text-slate-500">Section {c.section || 'A'} · Dr. faculty instructor</p>
+                    <p className="text-xs text-slate-500">Section {c.section || 'A'} · Faculty Instructor</p>
                   </div>
                   <div className="text-right">
                     <span className={`text-xl font-extrabold ${pct >= 75 ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -439,7 +483,7 @@ function StudentDashboard({ user, classrooms, students = [], onRefresh }) {
                   </div>
                   <div className="flex justify-between text-[11px] text-slate-400">
                     <span>Target: 75% Min</span>
-                    <span className="font-semibold text-slate-600">{c.attended || '22 / 24'} classes present</span>
+                    <span className="font-semibold text-slate-600">{c.attended || (stats ? `${stats.present} / ${stats.total_sessions} sessions` : 'No sessions recorded')}</span>
                   </div>
                 </div>
               </div>
@@ -500,7 +544,7 @@ export default function Dashboard() {
   }
 
   if (role === 'student') {
-    return <StudentDashboard user={user} classrooms={classrooms} />;
+    return <StudentDashboard user={user} classrooms={classrooms} students={students} onRefresh={() => studentsAPI.list().then(r => setStudents(r.data.students || []))} />;
   }
 
   return <TeacherDashboard user={user} classrooms={classrooms} />;

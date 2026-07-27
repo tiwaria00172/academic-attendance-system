@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { studentsAPI } from '../services/api';
-import { Users, UserPlus, Upload, CheckCircle2, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
+import { Users, UserPlus, Upload, CheckCircle2, AlertCircle, Loader2, RefreshCw, Camera } from 'lucide-react';
+import ThreeAngleWebcamModal from '../components/ThreeAngleWebcamModal';
 
 export default function StudentManagement() {
   const [students, setStudents] = useState([]);
@@ -13,6 +14,7 @@ export default function StudentManagement() {
   const [submitting, setSubmitting] = useState(false);
   const [msg, setMsg]           = useState(null);
   const [uploadingId, setUploadingId] = useState(null);
+  const [showLiveModal, setShowLiveModal] = useState(false);
 
   const fetchStudents = () => {
     setLoading(true);
@@ -205,6 +207,18 @@ export default function StudentManagement() {
             <p className="text-xs text-slate-500">
               Upload Front, Left (~45°), and Right (~45°) photos for Roll Number <b>{angleStudent.roll_number}</b> to generate a multi-template recognition vector.
             </p>
+            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 p-3 rounded-2xl border border-purple-200/60 flex items-center justify-between gap-2">
+              <span className="text-xs text-purple-900 font-bold flex items-center gap-1">⚡ Fast Option: Live Webcam</span>
+              <button
+                type="button"
+                onClick={() => setShowLiveModal(true)}
+                className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shrink-0 active:scale-95 transition-all"
+              >
+                <Camera size={14} />
+                <span>Live 3-Angle Capture</span>
+              </button>
+            </div>
+
             <form onSubmit={async (e) => {
               e.preventDefault();
               const front = e.target.front.files[0];
@@ -245,6 +259,29 @@ export default function StudentManagement() {
             </form>
           </div>
         </div>
+      )}
+
+      {showLiveModal && angleStudent && (
+        <ThreeAngleWebcamModal
+          studentName={angleStudent.name}
+          onComplete={async (files) => {
+            setShowLiveModal(false);
+            setUploadingId(angleStudent.id);
+            const currentStudent = angleStudent;
+            setAngleStudent(null);
+            setMsg(null);
+            try {
+              const res = await studentsAPI.uploadPhotoAngles(currentStudent.id, { front: files.front, left: files.left, right: files.right });
+              setMsg({ type: 'success', text: res.data.message });
+              fetchStudents();
+            } catch (err) {
+              setMsg({ type: 'error', text: err.response?.data?.error || '3-angle live upload failed' });
+            } finally {
+              setUploadingId(null);
+            }
+          }}
+          onClose={() => setShowLiveModal(false)}
+        />
       )}
     </div>
   );

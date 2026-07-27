@@ -66,29 +66,29 @@ export default function FaceVerification({
                  accent="amber">
           {confirm.map((s) => (
             <div key={s.student_id} className="bg-white rounded-xl p-4 space-y-3
-                                                border border-slate-100">
-              <div className="flex items-center justify-between">
+                                                border border-slate-100 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
-                  <p className="font-semibold text-slate-800">{s.name}</p>
-                  <p className="text-xs text-slate-400">Roll: {s.roll}</p>
+                  <p className="font-bold text-slate-800 text-sm sm:text-base break-words">{s.name}</p>
+                  <p className="text-xs text-slate-400 font-semibold">Roll Number: {s.roll}</p>
                 </div>
-                {confidenceBar(s.confidence)}
+                <div className="w-full sm:w-48">{confidenceBar(s.confidence)}</div>
               </div>
               {s.alternatives?.length > 0 && (
                 <p className="text-xs text-slate-500">
                   Could also be: {s.alternatives[0].name} ({Math.round(s.alternatives[0].similarity*100)}%)
                 </p>
               )}
-              <div className="flex gap-2">
+              <div className="flex gap-2 pt-1">
                 <button onClick={() => setStatus(s.student_id, 'present')} disabled={disabled}
-                        className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all
+                        className={`flex-1 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all
                           ${s.status === 'present'
                             ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/25'
                             : 'bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-600'}`}>
                   ✓ Present
                 </button>
                 <button onClick={() => setStatus(s.student_id, 'absent')} disabled={disabled}
-                        className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all
+                        className={`flex-1 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all
                           ${s.status === 'absent'
                             ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/25'
                             : 'bg-slate-100 text-slate-600 hover:bg-rose-50 hover:text-rose-600'}`}>
@@ -142,22 +142,26 @@ function Section({ icon: Icon, title, count, accent, children }) {
 
 function Row({ s, disabled, setStatus, bar }) {
   return (
-    <div className="bg-white rounded-xl px-4 py-3 flex items-center justify-between
-                    border border-slate-100 gap-3">
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-slate-800 truncate">{s.name}</p>
-        {bar && <div className="mt-1">{bar}</div>}
+    <div className="bg-white rounded-xl p-3 sm:px-4 sm:py-3 flex flex-col sm:flex-row sm:items-center justify-between border border-slate-100 gap-2 sm:gap-3 shadow-sm hover:border-emerald-200 transition-all">
+      <div className="w-full sm:flex-1">
+        <div className="flex flex-wrap items-center justify-between sm:justify-start gap-1 sm:gap-2">
+          <p className="font-bold text-slate-800 text-sm sm:text-base break-words">{s.name}</p>
+          <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600">Roll: {s.roll}</span>
+        </div>
+        {bar && <div className="mt-2 w-full">{bar}</div>}
       </div>
-      <select value={s.status} disabled={disabled}
-              onChange={(e) => setStatus(s.student_id, e.target.value)}
-              className={`text-xs font-bold px-3 py-1.5 rounded-lg border-0 cursor-pointer
-                ${s.status === 'present'
-                  ? 'bg-emerald-100 text-emerald-700'
-                  : 'bg-rose-100 text-rose-700'}
-                disabled:opacity-50`}>
-        <option value="present">Present</option>
-        <option value="absent">Absent</option>
-      </select>
+      <div className="flex items-center justify-end w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-0 border-slate-100">
+        <select value={s.status} disabled={disabled}
+                onChange={(e) => setStatus(s.student_id, e.target.value)}
+                className={`text-xs font-bold px-3 py-2 rounded-lg border-0 cursor-pointer w-full sm:w-auto
+                  ${s.status === 'present'
+                    ? 'bg-emerald-100 text-emerald-800 shadow-sm'
+                    : 'bg-rose-100 text-rose-800 shadow-sm'}
+                  disabled:opacity-50`}>
+          <option value="present">✓ Present</option>
+          <option value="absent">✗ Absent</option>
+        </select>
+      </div>
     </div>
   );
 }
