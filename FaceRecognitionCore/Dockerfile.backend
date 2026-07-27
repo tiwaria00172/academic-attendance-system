@@ -18,10 +18,14 @@ WORKDIR /app
 COPY requirements.txt ./root_requirements.txt
 COPY backend/requirements.txt ./backend_requirements.txt
 
+# Restrict CMake and Make compilation to 1 CPU job to prevent Out Of Memory (OOM > 8GB) errors during dlib build
+ENV MAKEFLAGS="-j1"
+ENV CMAKE_BUILD_PARALLEL_LEVEL="1"
+
 # Install Python dependencies including Gunicorn and PostgreSQL driver for production
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r root_requirements.txt && \
-    pip install --no-cache-dir -r backend_requirements.txt && \
+    pip install --no-cache-dir --prefer-binary -r root_requirements.txt && \
+    pip install --no-cache-dir --prefer-binary -r backend_requirements.txt && \
     pip install --no-cache-dir gunicorn psycopg2-binary
 
 # Copy Core Face Recognition Engine (parent modules)
