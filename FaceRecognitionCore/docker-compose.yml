@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: attendance_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: attendance_admin
+      POSTGRES_PASSWORD: secure_production_password
+      POSTGRES_DB: attendance_prod_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U attendance_admin -d attendance_prod_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: attendance_backend
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=super-secret-jwt-production-key-change-in-prod
+      - SQLALCHEMY_DATABASE_URI=postgresql://attendance_admin:secure_production_password@db:5432/attendance_prod_db
+      - TRAINING_DATA_DIR=/app/data/training
+      - CLASSROOM_DATA_DIR=/app/data/classroom
+    volumes:
+      - training_data:/app/data/training
+      - classroom_data:/app/data/classroom
+      - backend_uploads:/app/backend/uploads
+    ports:
+      - "5000:5000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: attendance_frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+
+volumes:
+  postgres_data:
+  training_data:
+  classroom_data:
+  backend_uploads:

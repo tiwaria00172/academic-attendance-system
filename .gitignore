@@ -1,0 +1,19 @@
+# Environments & Caches
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+env/
+.env
+.env.production
+.env.local
+dist/
+build/
+*.db
+*.sqlite3
+.DS_Store
+.idea/
+.vscode/
+*.log

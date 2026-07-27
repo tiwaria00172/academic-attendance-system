@@ -1,0 +1,50 @@
+# Production Backend Dockerfile for Face Recognition Attendance System
+FROM python:3.10-slim
+
+# Install system dependencies required for dlib and OpenCV
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libopenblas-dev \
+    liblapack-dev \
+    libx11-dev \
+    libgtk-3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy root requirements and backend requirements
+COPY requirements.txt ./root_requirements.txt
+COPY backend/requirements.txt ./backend_requirements.txt
+
+# Install Python dependencies including Gunicorn and PostgreSQL driver for production
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r root_requirements.txt && \
+    pip install --no-cache-dir -r backend_requirements.txt && \
+    pip install --no-cache-dir gunicorn psycopg2-binary
+
+# Copy Core Face Recognition Engine (parent modules)
+COPY config.py .
+COPY face_recognition_engine.py .
+COPY face_matcher.py .
+COPY data_loader.py .
+COPY image_processor.py .
+
+# Copy Backend Application
+COPY backend ./backend
+
+# Set environment variables for production
+ENV PYTHONPATH=/app
+ENV FLASK_ENV=production
+ENV FLASK_APP=backend/run.py
+
+# Create persistent storage directories for data, cache, and uploads
+RUN mkdir -p /app/data/training /app/data/classroom /app/backend/instance /app/backend/uploads
+
+EXPOSE 5000
+
+# Start Gunicorn production WSGI server with 4 workers
+WORKDIR /app/backend
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "120", "run:app"]
