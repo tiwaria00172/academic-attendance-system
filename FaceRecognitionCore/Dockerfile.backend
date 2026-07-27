@@ -5,12 +5,11 @@ FROM python:3.10-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     libopenblas-dev \
     liblapack-dev \
     libx11-dev \
-    libgtk-3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -47,4 +46,4 @@ EXPOSE 5000
 
 # Start Gunicorn production WSGI server with 4 workers
 WORKDIR /app/backend
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "120", "run:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "4", "--timeout", "120", "run:app"]
