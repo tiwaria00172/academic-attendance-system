@@ -41,6 +41,13 @@ class CoreFaceRecognitionService:
         import face_recognition
         try:
             img = face_recognition.load_image_file(photo_path)
+            
+            # Fast fail for completely blank/solid images (like mock webcams)
+            import numpy as np
+            if np.std(img) < 5:
+                print(f'[ADAPTIVE] Fast fail for blank image: {photo_path}')
+                return None
+                
             for scale in [2, 3]:
                 locs = face_recognition.face_locations(img, number_of_times_to_upsample=scale, model='hog')
                 if locs:
@@ -144,12 +151,43 @@ class CoreFaceRecognitionService:
             if bm:
                 detected_ids.add(bm.get('student_id'))
 
-        absent = [
-            {'student_id': sid, 'name': info['name'],
-             'roll_number': info.get('roll_number', sid)}
-            for sid, info in self.student_database.items()
-            if sid not in detected_ids
-        ]
+        # Fetch enrolled students from SQL database
+        from app.models.classroom import Classroom
+        classroom = Classroom.query.get(classroom_id)
+        enrolled_students = classroom.students if classroom else []
+        enrolled_rolls = set(str(s.roll_number).strip().lower() for s in enrolled_students)
+
+        # Convert detected ids/rolls to lowercase strings for case-insensitive matching
+        detected_rolls = set(str(rid).strip().lower() for rid in detected_ids if rid)
+
+        # Filter matches to only include enrolled students (prevents unregistered/cross-class logs)
+        filtered_auto_marked = []
+        for m in all_matches['auto_marked']:
+            roll = m.get('roll_number') or m.get('student_id')
+            if roll and str(roll).strip().lower() in enrolled_rolls:
+                filtered_auto_marked.append(m)
+
+        filtered_needs_confirmation = []
+        for m in all_matches['needs_confirmation']:
+            bm = m.get('best_match', {})
+            if bm:
+                roll = bm.get('roll_number') or bm.get('student_id')
+                if roll and str(roll).strip().lower() in enrolled_rolls:
+                    filtered_needs_confirmation.append(m)
+
+        all_matches['auto_marked'] = filtered_auto_marked
+        all_matches['needs_confirmation'] = filtered_needs_confirmation
+
+        # Enrolled students who were not detected are marked absent
+        absent = []
+        for s in enrolled_students:
+            roll = str(s.roll_number).strip().lower()
+            if roll not in detected_rolls:
+                absent.append({
+                    'student_id': s.roll_number,
+                    'name': s.name,
+                    'roll_number': s.roll_number
+                })
 
         return {
             'classroom_id': classroom_id,

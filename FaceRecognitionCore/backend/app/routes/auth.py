@@ -29,6 +29,15 @@ def seed():
             s = Student(roll_number=username, name="Default Student", email=email, department="Computer Science", is_active=True)
             db.session.add(s)
     db.session.commit()
+
+    # Enroll default student in CS-101
+    from app.models.classroom import Classroom
+    classroom = Classroom.query.filter_by(name='CS-101').first()
+    student_record = Student.query.filter_by(roll_number='student').first()
+    if classroom and student_record and student_record not in classroom.students:
+        classroom.students.append(student_record)
+        db.session.commit()
+
     return {'message': 'Seed completed', 'created': created}, 200
 
 
