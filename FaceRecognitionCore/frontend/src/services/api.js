@@ -57,6 +57,7 @@ export const studentsAPI = {
     fd.append('photo', photo);
     return api.post(`/students/${studentId}/photo`, fd, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 90000, // 90s — face encoding is CPU-heavy on free tier
     });
   },
   uploadPhotoAngles(studentId, { front, left, right }) {
@@ -66,6 +67,7 @@ export const studentsAPI = {
     if (right) fd.append('right', right);
     return api.post(`/students/${studentId}/photo_angles`, fd, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 90000, // 90s — 3 angle encodings can take 20-40s on free tier
     });
   },
 };

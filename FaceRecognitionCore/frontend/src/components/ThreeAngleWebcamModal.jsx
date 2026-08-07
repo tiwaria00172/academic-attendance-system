@@ -7,7 +7,7 @@ export default function ThreeAngleWebcamModal({ onComplete, onClose, studentName
 
   const [cameraActive, setCameraActive] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [step, setStep] = useState(1); // 1 = Front, 2 = Left, 3 = Right
+  const [step, setStep] = useState(1); // 1=Front, 2=Left, 3=Right, 4=Done/Uploading
   const [capturedFiles, setCapturedFiles] = useState({ front: null, left: null, right: null });
   const [previewUrls, setPreviewUrls] = useState({ front: null, left: null, right: null });
 
@@ -16,7 +16,9 @@ export default function ThreeAngleWebcamModal({ onComplete, onClose, studentName
     async function startCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
+          // Request lower resolution — 640×480 is plenty for face encoding
+          // and dramatically reduces server CPU time on Render free tier
+          video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
         });
         if (isMounted && videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -43,12 +45,17 @@ export default function ThreeAngleWebcamModal({ onComplete, onClose, studentName
     const video = videoRef.current;
     if (!video) return;
 
+    // Capture at 640×480 — sufficient for 128D face encoding, dramatically
+    // faster to upload and process on Render's free-tier CPU
+    const CAPTURE_W = 640;
+    const CAPTURE_H = 480;
     const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
+    canvas.width  = CAPTURE_W;
+    canvas.height = CAPTURE_H;
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(video, 0, 0, CAPTURE_W, CAPTURE_H);
 
+    // 0.85 quality — still excellent for face encoding, ~30% smaller file
     canvas.toBlob((blob) => {
       if (!blob) return;
       const url = URL.createObjectURL(blob);
@@ -68,6 +75,7 @@ export default function ThreeAngleWebcamModal({ onComplete, onClose, studentName
         const finalFiles = { ...capturedFiles, right: file };
         setCapturedFiles(finalFiles);
         setPreviewUrls(prev => ({ ...prev, right: url }));
+        setStep(4); // uploading indicator
 
         // Stop camera tracks and return all 3 files
         if (streamRef.current) {
@@ -75,16 +83,18 @@ export default function ThreeAngleWebcamModal({ onComplete, onClose, studentName
         }
         onComplete(finalFiles);
       }
-    }, 'image/jpeg', 0.95);
+    }, 'image/jpeg', 0.85);
   };
 
   const getStepTitle = () => {
+    if (step === 4) return '⏳ Uploading & Processing...';
     if (step === 1) return '1️⃣ Look Straight into Camera (Front View)';
     if (step === 2) return '2️⃣ Turn Head Slightly Left (~45° Angle)';
     return '3️⃣ Turn Head Slightly Right (~45° Angle)';
   };
 
   const getStepDesc = () => {
+    if (step === 4) return 'All 3 photos captured! Server is extracting your AI face vectors. This takes 10–20 seconds...';
     if (step === 1) return 'Position your face in the center of the frame and look directly at the lens.';
     if (step === 2) return 'Rotate your head slowly to your left so we capture your left facial profile.';
     return 'Rotate your head slowly to your right so we capture your right facial profile.';
@@ -167,20 +177,30 @@ export default function ThreeAngleWebcamModal({ onComplete, onClose, studentName
           )}
         </div>
 
-        {/* Capture Button */}
+        {/* Capture Button / Uploading State */}
         <div className="pt-2">
-          <button
-            onClick={handleCapture}
-            disabled={!cameraActive}
-            className={`w-full py-4 rounded-2xl font-extrabold text-base flex items-center justify-center gap-2 transition-all shadow-xl ${
-              !cameraActive
-                ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                : 'bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-purple-500/30 active:scale-95'
-            }`}
-          >
-            <Camera size={22} />
-            <span>Capture {step === 1 ? 'Front' : step === 2 ? 'Left 45°' : 'Right 45°'} Angle</span>
-          </button>
+          {step === 4 ? (
+            <div className="w-full py-4 rounded-2xl bg-indigo-900/60 border border-indigo-500/40 flex flex-col items-center justify-center gap-2">
+              <div className="flex items-center gap-3">
+                <RefreshCw size={20} className="animate-spin text-indigo-400" />
+                <span className="text-indigo-200 font-bold text-sm">Uploading & extracting face vectors…</span>
+              </div>
+              <p className="text-xs text-indigo-400/80">Please wait 10–20 seconds. Do NOT close this window.</p>
+            </div>
+          ) : (
+            <button
+              onClick={handleCapture}
+              disabled={!cameraActive}
+              className={`w-full py-4 rounded-2xl font-extrabold text-base flex items-center justify-center gap-2 transition-all shadow-xl ${
+                !cameraActive
+                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-purple-500/30 active:scale-95'
+              }`}
+            >
+              <Camera size={22} />
+              <span>Capture {step === 1 ? 'Front' : step === 2 ? 'Left 45°' : 'Right 45°'} Angle</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

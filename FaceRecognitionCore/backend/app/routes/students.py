@@ -71,6 +71,8 @@ def upload_photo(sid):
         core_service.reload_database()
         return {'message': 'Photo uploaded, face registered', 'student': student.to_dict()}, 200
 
+    if os.path.exists(dest):
+        os.remove(dest)
     return {'error': 'Could not extract face from photo'}, 422
 
 
@@ -80,41 +82,57 @@ def upload_photo_angles(sid):
     """Upload 3 angles (front, left, right) for robust real-world enrollment."""
     student = Student.query.get_or_404(sid)
     files = request.files
-    
+
     if not files:
         return {'error': 'No photo files provided'}, 400
 
     training_dir = Config.TRAINING_DATA_DIR
     os.makedirs(training_dir, exist_ok=True)
-    
+
     encodings = []
     saved_angles = []
-    
+
     for angle in ['front', 'left', 'right']:
         if angle in files and files[angle].filename:
             photo = files[angle]
             filename = secure_filename(f"student_{student.roll_number}_{student.name}_{angle}.jpg")
             dest = os.path.join(training_dir, filename)
             photo.save(dest)
-            
+
+            # ── Downscale to max 640×480 before encoding ──────────────────────
+            # Cuts CPU time from ~6s to ~1-2s per image on Render free tier
+            try:
+                from PIL import Image as PILImage
+                img = PILImage.open(dest).convert('RGB')
+                MAX_W, MAX_H = 640, 480
+                if img.width > MAX_W or img.height > MAX_H:
+                    img.thumbnail((MAX_W, MAX_H), PILImage.LANCZOS)
+                    img.save(dest, 'JPEG', quality=90)
+                    print(f'[RESIZE] {angle} downscaled to {img.size}')
+            except Exception as resize_err:
+                print(f'[RESIZE] Could not resize {angle}: {resize_err}')
+
             enc = core_service.extract_single_encoding(dest)
             if enc is not None:
                 encodings.append(enc)
                 saved_angles.append(angle)
+            else:
+                if os.path.exists(dest):
+                    os.remove(dest)
 
     if not encodings:
-        return {'error': 'Could not detect faces in any of the 3 angle photos. Ensure good lighting and clear view.'}, 422
+        return {'error': 'Could not detect faces in any angle photos. Ensure good lighting and a clear frontal view.'}, 422
 
-    # Average the encodings across detected angles for a unified multi-angle vector
+    # Average encodings across detected angles for a unified multi-angle vector
     import numpy as np
     avg_encoding = np.mean(encodings, axis=0)
-    
+
     student.set_face_encoding(avg_encoding)
     db.session.commit()
     core_service.reload_database()
-    
+
     return {
-        'message': f'Successfully enrolled {len(saved_angles)} angles ({", ".join(saved_angles)}). Multi-angle AI profile active!',
+        'message': f'Successfully enrolled {len(saved_angles)} angle(s) ({", ".join(saved_angles)}). Multi-angle AI profile active!',
         'angles_enrolled': saved_angles,
         'student': student.to_dict()
     }, 200
