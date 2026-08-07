@@ -41,13 +41,12 @@ class CoreFaceRecognitionService:
         import face_recognition
         try:
             img = face_recognition.load_image_file(photo_path)
-            
+
             # Fast fail for completely blank/solid images (like mock webcams)
-            import numpy as np
             if np.std(img) < 5:
                 print(f'[ADAPTIVE] Fast fail for blank image: {photo_path}')
                 return None
-                
+
             for scale in [2, 3]:
                 locs = face_recognition.face_locations(img, number_of_times_to_upsample=scale, model='hog')
                 if locs:
@@ -125,13 +124,18 @@ class CoreFaceRecognitionService:
                         if locs:
                             encs = face_recognition.face_encodings(img, locs, num_jitters=1)
                             if encs:
-                                result = {'success': True, 'face_count': len(encs), 'encodings': [np.array(e, dtype=np.float64) for e in encs]}
+                                result = {
+                                    'success': True,
+                                    'face_count': len(encs),
+                                    'encodings': [np.array(e, dtype=np.float64) for e in encs]
+                                }
                                 print(f'[ADAPTIVE] Recovered {len(encs)} face(s) in class photo at upsample scale {scale}')
                                 break
 
                 if not result['success']:
                     print(f'[CORE] Skip {photo_path}: {result.get("error", "Unknown error")}')
                     continue
+
                 total_detected += result['face_count']
                 matches = self.matcher.match_all_faces(
                     result['encodings'], self.student_database
@@ -142,7 +146,7 @@ class CoreFaceRecognitionService:
             except Exception as exc:
                 print(f'[CORE] Error: {exc}')
 
-        # Determine absent students
+        # ── Determine which student IDs were detected ─────────────
         detected_ids = set()
         for m in all_matches['auto_marked']:
             detected_ids.add(m.get('student_id'))
@@ -151,49 +155,70 @@ class CoreFaceRecognitionService:
             if bm:
                 detected_ids.add(bm.get('student_id'))
 
-        # Fetch enrolled students from SQL database
-        from app.models.classroom import Classroom
-        classroom = Classroom.query.get(classroom_id)
-        enrolled_students = classroom.students if classroom else []
-        enrolled_rolls = set(str(s.roll_number).strip().lower() for s in enrolled_students)
-
-        # Convert detected ids/rolls to lowercase strings for case-insensitive matching
         detected_rolls = set(str(rid).strip().lower() for rid in detected_ids if rid)
 
-        # Filter matches to only include enrolled students (prevents unregistered/cross-class logs)
-        filtered_auto_marked = []
-        for m in all_matches['auto_marked']:
-            roll = m.get('roll_number') or m.get('student_id')
-            if roll and str(roll).strip().lower() in enrolled_rolls:
-                filtered_auto_marked.append(m)
+        # ── Fetch classroom enrollment roster from SQL ─────────────
+        from app.models.classroom import Classroom
+        classroom = Classroom.query.get(classroom_id)
+        enrolled_students = list(classroom.students) if classroom else []
+        has_enrollment = len(enrolled_students) > 0
 
-        filtered_needs_confirmation = []
-        for m in all_matches['needs_confirmation']:
-            bm = m.get('best_match', {})
-            if bm:
-                roll = bm.get('roll_number') or bm.get('student_id')
+        if has_enrollment:
+            # ── ROSTERED MODE ──────────────────────────────────────
+            # Classroom has enrolled students.  Only show matches for
+            # students on the roster and mark all others absent.
+            enrolled_rolls = set(str(s.roll_number).strip().lower() for s in enrolled_students)
+
+            filtered_auto_marked = []
+            for m in all_matches['auto_marked']:
+                roll = m.get('roll_number') or m.get('student_id')
                 if roll and str(roll).strip().lower() in enrolled_rolls:
-                    filtered_needs_confirmation.append(m)
+                    filtered_auto_marked.append(m)
 
-        all_matches['auto_marked'] = filtered_auto_marked
-        all_matches['needs_confirmation'] = filtered_needs_confirmation
+            filtered_needs_confirmation = []
+            for m in all_matches['needs_confirmation']:
+                bm = m.get('best_match', {})
+                if bm:
+                    roll = bm.get('roll_number') or bm.get('student_id')
+                    if roll and str(roll).strip().lower() in enrolled_rolls:
+                        filtered_needs_confirmation.append(m)
 
-        # Enrolled students who were not detected are marked absent
-        absent = []
-        for s in enrolled_students:
-            roll = str(s.roll_number).strip().lower()
-            if roll not in detected_rolls:
-                absent.append({
-                    'student_id': s.roll_number,
-                    'name': s.name,
-                    'roll_number': s.roll_number
-                })
+            all_matches['auto_marked'] = filtered_auto_marked
+            all_matches['needs_confirmation'] = filtered_needs_confirmation
+
+            # Enrolled students not detected → absent
+            absent = []
+            for s in enrolled_students:
+                roll = str(s.roll_number).strip().lower()
+                if roll not in detected_rolls:
+                    absent.append({
+                        'student_id': s.roll_number,
+                        'name': s.name,
+                        'roll_number': s.roll_number,
+                    })
+
+        else:
+            # ── OPEN / UNROSTERED MODE ─────────────────────────────
+            # Classroom has NO enrolled students yet (fresh / unset up).
+            # Fall back to the global face-DB: show all detected matches
+            # as-is so the teacher can still use the system immediately.
+            # Students in the face DB who were not detected → absent.
+            absent = [
+                {
+                    'student_id': sid,
+                    'name': info['name'],
+                    'roll_number': info.get('roll_number', sid),
+                }
+                for sid, info in self.student_database.items()
+                if str(sid).strip().lower() not in detected_rolls
+            ]
 
         return {
             'classroom_id': classroom_id,
             'total_faces_detected': total_detected,
             'matches': all_matches,
             'absent_students': absent,
+            'enrollment_mode': 'rostered' if has_enrollment else 'open',
         }
 
     def extract_single_encoding(self, photo_path):
