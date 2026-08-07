@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "college-attendance-ai-2026",
     "public": "dist",
     "ignore": [
       "firebase.json",

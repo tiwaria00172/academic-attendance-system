@@ -2,14 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { studentsAPI, classroomsAPI } from '../services/api';
 import {
   Users, UserPlus, Upload, CheckCircle2, AlertCircle, Loader2,
-  RefreshCw, Camera, School, Plus, Trash2, UserCheck
+  RefreshCw, Camera, School, Plus, UserCheck
 } from 'lucide-react';
 import ThreeAngleWebcamModal from '../components/ThreeAngleWebcamModal';
 
 export default function StudentManagement() {
   const [students, setStudents] = useState([]);
   const [classrooms, setClassrooms] = useState([]);
-  const [loading, setLoading]   = useState(true);
+  const [loading, setLoading]       = useState(true);
+  const [classroomsLoading, setClassroomsLoading] = useState(true);
+  const [classroomsError, setClassroomsError]     = useState(null);
   const [showAdd, setShowAdd]   = useState(false);
   const [newRoll, setNewRoll]   = useState('');
   const [newName, setNewName]   = useState('');
@@ -36,13 +38,19 @@ export default function StudentManagement() {
   };
 
   const fetchClassrooms = () => {
+    setClassroomsLoading(true);
+    setClassroomsError(null);
     classroomsAPI.list()
       .then((r) => {
         const rooms = r.data.classrooms || [];
         setClassrooms(rooms);
         if (rooms.length > 0 && !selectedClassroom) setSelectedClassroom(String(rooms[0].id));
       })
-      .catch(() => {});
+      .catch((err) => {
+        const msg = err.response?.data?.error || err.message || 'Could not load classrooms';
+        setClassroomsError(msg);
+      })
+      .finally(() => setClassroomsLoading(false));
   };
 
   useEffect(() => {
@@ -210,7 +218,13 @@ export default function StudentManagement() {
               Assign students to a classroom so the AI camera scan marks them present/absent correctly.
             </p>
           </div>
-          {classrooms.length > 0 && (
+          {classroomsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-slate-400 shrink-0">
+              <Loader2 size={14} className="animate-spin" /> Loading classrooms…
+            </div>
+          ) : classroomsError ? (
+            <p className="text-xs text-rose-500 font-semibold shrink-0">⚠️ {classroomsError}</p>
+          ) : classrooms.length > 0 ? (
             <select
               value={selectedClassroom}
               onChange={(e) => setSelectedClassroom(e.target.value)}
@@ -220,6 +234,8 @@ export default function StudentManagement() {
                 <option key={c.id} value={c.id}>{c.name} ({c.department || 'General'})</option>
               ))}
             </select>
+          ) : (
+            <p className="text-xs text-amber-600 font-semibold shrink-0">No classrooms yet — create one first.</p>
           )}
         </div>
 
